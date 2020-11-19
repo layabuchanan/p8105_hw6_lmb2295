@@ -1,0 +1,46 @@
+---
+title: "Homework 6"
+author: "Laya Buchanan"
+
+date: 2020-19-05
+output: github_document
+---
+
+This is my submission for the sixth homework assignment for P8105.  
+
+```{r message = FALSE, echo = FALSE}
+library(tidyverse)
+library(broom)
+library(knitr)
+
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_colour_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+## Problem 1
+
+Read in the data.
+
+```{r}
+
+
+birthweight_df = 
+  read_csv("./data/birthweight.csv") %>% 
+  mutate(babysex = recode(babysex, '1' = "male", '2' = "female"),
+         malform = recode(malform, '0' = "absent", '1' = "present"),
+         mrace = recode(mrace, '1' = "white", '2' = "black", '3' = "asian", '4' = "puerto rican", '8' = "other")
+         )
+```
