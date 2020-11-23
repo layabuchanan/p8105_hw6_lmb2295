@@ -148,17 +148,16 @@ weather_df =
     tmax = tmax / 10) %>%
   select(name, id, everything())
 ```
+First, I write a function to generate bootstrap samples.
 
 ```{r}
 boot_sample = function(df) {
   sample_frac(df, replace = TRUE)
 }
+```
 
-boot_sample(weather_df) %>% 
-  ggplot(aes(x = tmin, y = tmax)) + 
-  geom_point(alpha = .5) +
-  stat_smooth(method = "lm")
-
+Next, I create a list column to keep track of sample data.
+```{r}
 boot_straps = 
   data_frame(
     strap_number = 1:100,
@@ -166,5 +165,55 @@ boot_straps =
   )
 
 boot_straps
+
+```
+
+```{r}
+boot_straps %>% 
+  filter(strap_number %in% 42:44) %>% 
+  unnest(strap_sample) %>% 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_point(alpha = .5) +
+  stat_smooth(method = "lm", se = FALSE) +
+  facet_grid(~strap_number)
+```
+
+```{r}
+boot_straps = 
+  weather_df %>% 
+  modelr::bootstrap(n = 1000)
+
+weather_df %>% 
+  bootstrap(100, id = "strap_number") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)), 
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(strap_number, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarize(
+    mean_est = mean(estimate),
+    sd_est = sd(estimate)
+  )
+
+weather_df %>% 
+  modelr::bootstrap(n = 100) %>% 
+  mutate(
+    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
+    results = map(models, broom::glance)) %>% 
+  select(results) %>% 
+  unnest(results) %>% 
+  ggplot(aes(x = r.squared)) + geom_density()
+
+weather_df %>% 
+  modelr::bootstrap(n = 100) %>% 
+  mutate(
+    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
+    results = map(models, broom::tidy)) %>% 
+  select(results) %>% 
+  unnest(results) %>% 
+  group_by()
+  ggplot(aes(x = r.squared)) + geom_density()
 ```
 
