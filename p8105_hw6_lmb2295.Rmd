@@ -30,6 +30,8 @@ options(
 
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
+
+set.seed(1)
 ```
 
 ## Problem 1
@@ -148,8 +150,21 @@ weather_df =
 ```
 
 ```{r}
-boot_sample = function(weather_df) {
+boot_sample = function(df) {
   sample_frac(df, replace = TRUE)
 }
+
+boot_sample(weather_df) %>% 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_point(alpha = .5) +
+  stat_smooth(method = "lm")
+
+boot_straps = 
+  data_frame(
+    strap_number = 1:100,
+    strap_sample = rerun(100, boot_sample(weather_df))
+  )
+
+boot_straps
 ```
 
