@@ -13,6 +13,7 @@ library(tidyverse)
 library(broom)
 library(knitr)
 library(modelr)
+library(mgcv)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -46,40 +47,109 @@ birthweight_df =
          frace = recode(frace, '1' = "white", '2' = "black", '3' = "asian", '4' = "puerto rican", '8' = "other", '9' = "unknown")
          )
 ```
+#### Model Building
+
+I'm going to experiment with a few variables to see if I can find something with an apparent crude association with baby birth weight using simple plots. I will also be looking at the linearity of the association.
+
+```{r}
+birthweight_df %>% 
+  ggplot(aes(x = bwt, y = babysex)) + 
+  geom_point()
+```
 
 
-Next, I'm going to build a model to assess the relationship between number of live births during pregnancy and baby's birth weight. I am also going to include the race of each parent, family income, and mother's age at delivery as potential confounders.
+In this case, we see an association with a binomial dependent variable, so a linear model is appropriate to use. Next, I'm going to build a model to assess the relationship between the sex of the baby and baby's birth weight.  I will not be adding any other variables to this model because none of the other variables are potential confounders.
 
 
 ```{r}
-parity_fit = lm(bwt ~ parity + fincome + frace + momage + mrace, data = birthweight_df)
-
+babysex_fit = lm(bwt ~ babysex, data = birthweight_df)
 ```
 
 Next, I create a plot of model residuals against fitted values.
 
 ```{r}
 birthweight_df %>% 
-  add_residuals(parity_fit) %>% 
-  add_predictions(parity_fit) %>%
+  add_residuals(babysex_fit) %>% 
+  add_predictions(babysex_fit) %>%
   ggplot(aes(x = pred, y = resid)) + geom_point()
-
-birthweight_df %>% 
-  ggplot(aes(x = bwt, y = menarche)) + 
-  geom_point()
 ```
 
 Now, I will create two other models to compare my proposed model to, one sing length at birth and gestational age as predictors (main effects only), and the other using head circumference, length, sex, and all interactions (including the three-way interaction) between these.
 
+First, I will assess the linearity of these relationships.
+
 ```{r}
-gaweeks_fit = lm(bwt ~ parity + gaweeks, data = birthweight_df)
-interactions_fit = lm(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + blength*bhead + babysex*bhead*blength, data = birthweight_df)
+birthweight_df %>% 
+  ggplot(aes(x = bwt, y = gaweeks)) + 
+  geom_point()
+
+birthweight_df %>% 
+  ggplot(aes(x = bwt, y = gaweeks)) + 
+  geom_point()
+```
+
+```{r}
+gaweeks_fit = gam(bwt ~ gaweeks, data = birthweight_df)
+
+interactions_fit = gam(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + blength*bhead + babysex*bhead*blength, data = birthweight_df)
 ```
 
 Next, I will make this comparison in terms of the cross-validated prediction error.
 
 ```{r}
 cv_df = 
-  crossv_mc(birthweight_df, 250) 
+  crossv_mc(birthweight_df, 250) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)) 
+```
+
+```{r}
+cv_df = 
+  cv_df %>% 
+  mutate(
+    babysex_fit = map(train, ~lm(bwt ~ babysex, data = birthweight_df)),
+    gaweeks_fit = map(train, ~gam(bwt ~ parity + gaweeks, data = birthweight_df)),
+    interactions_fit = map(train, ~gam(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + blength*bhead + babysex*bhead*blength, data = birthweight_df))) %>% 
+  mutate(
+    rmse_babysex = map2_dbl(babysex_fit, test, ~rmse(model = .x, data = .y)),
+    rmse_gaweeks = map2_dbl(gaweeks_fit, test, ~rmse(model = .x, data = .y)),
+    rmse_interactions = map2_dbl(interactions_fit, test, ~rmse(model = .x, data = .y)))
+```
+
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
+Based on the distributions of the root mean squared errors, the model featuring head circumference, length, sex, and all interactions between these has the best fit, while the model I proposed has the worst fit.
+
+## Problem 3
+
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+```{r}
+boot_sample = function(weather_df) {
+  sample_frac(df, replace = TRUE)
+}
 ```
 
