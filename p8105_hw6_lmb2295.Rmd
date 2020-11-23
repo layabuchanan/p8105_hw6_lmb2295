@@ -51,7 +51,7 @@ birthweight_df =
 ```
 #### Model Building
 
-I'm going to experiment with a few variables to see if I can find something with an apparent crude association with baby birth weight using simple plots. I will also be looking at the linearity of the association.
+I'm going to the variable babysex to see if it has an apparent crude association with baby birth weight using a simple plot. I will also be looking at the linearity of the association.
 
 ```{r}
 birthweight_df %>% 
@@ -60,7 +60,7 @@ birthweight_df %>%
 ```
 
 
-In this case, we see an association with a binomial dependent variable, so a linear model is appropriate to use. Next, I'm going to build a model to assess the relationship between the sex of the baby and baby's birth weight.  I will not be adding any other variables to this model because none of the other variables are potential confounders.
+In this case, we see an association with a binomial dependent variable, so it will be appropriate to build a linear model to examine this association. Next, I'm going to build a model to assess the relationship between the sex of the baby and baby's birth weight.  I will not be adding any other variables to this model because none of the other variables are potential confounders.
 
 
 ```{r}
@@ -135,6 +135,7 @@ Based on the distributions of the root mean squared errors, the model featuring 
 
 ## Problem 3
 
+First, import the weather data.
 ```{r}
 weather_df = 
   rnoaa::meteo_pull_monitors(
@@ -148,72 +149,68 @@ weather_df =
     tmax = tmax / 10) %>%
   select(name, id, everything())
 ```
-First, I write a function to generate bootstrap samples.
-
-```{r}
-boot_sample = function(df) {
-  sample_frac(df, replace = TRUE)
-}
-```
-
-Next, I create a list column to keep track of sample data.
-```{r}
-boot_straps = 
-  data_frame(
-    strap_number = 1:100,
-    strap_sample = rerun(100, boot_sample(weather_df))
-  )
-
-boot_straps
-
-```
-
-```{r}
-boot_straps %>% 
-  filter(strap_number %in% 42:44) %>% 
-  unnest(strap_sample) %>% 
-  ggplot(aes(x = tmin, y = tmax)) + 
-  geom_point(alpha = .5) +
-  stat_smooth(method = "lm", se = FALSE) +
-  facet_grid(~strap_number)
-```
-
+I am creating 5000 bootstrap samples from the data imported above, for each bootstrap sample, I am producing estimates of r squared and log(β0*β1) and then plotting their distribution.
 ```{r}
 boot_straps = 
   weather_df %>% 
-  modelr::bootstrap(n = 1000)
+  bootstrap(100, id = "strap_number")
 
-weather_df %>% 
-  bootstrap(100, id = "strap_number") %>% 
+log_dist = 
+  boot_straps %>% 
   mutate(
     models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)), 
     results = map(models, broom::tidy)
   ) %>% 
   select(strap_number, results) %>% 
   unnest(results) %>% 
-  group_by(term) %>% 
-  summarize(
-    mean_est = mean(estimate),
-    sd_est = sd(estimate)
+  select(strap_number, term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>%
+  janitor::clean_names() %>%  
+  mutate(
+    b0b1 = log(intercept*tmin)
   )
 
-weather_df %>% 
-  modelr::bootstrap(n = 100) %>% 
+log_dist %>% 
+ggplot(aes(x = b0b1)) + geom_density() +
+  labs(
+    title = "log(β0*β1 Distribution")
+
+r_dist = 
+  boot_straps %>% 
   mutate(
     models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
     results = map(models, broom::glance)) %>% 
   select(results) %>% 
-  unnest(results) %>% 
-  ggplot(aes(x = r.squared)) + geom_density()
+  unnest(results)
 
-weather_df %>% 
-  modelr::bootstrap(n = 100) %>% 
-  mutate(
-    models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
-    results = map(models, broom::tidy)) %>% 
-  select(results) %>% 
-  unnest(results) %>% 
-  group_by()
-  ggplot(aes(x = r.squared)) + geom_density()
+r_dist %>% 
+  ggplot(aes(x = r.squared)) + geom_density() +
+  labs(
+    title = "r Squared Distribution")
 ```
+
+They both follow a roughly normal distribution.
+
+#### Confidence Intervals
+
+Next, I will identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r^2 and log(β^0∗β^1).
+
+```{r}
+log_dist %>% 
+  summarize(
+    ci_lower = quantile(b0b1, 0.025), 
+    ci_upper = quantile(b0b1, 0.975)) %>% 
+  knitr::kable(digits = 3)
+
+r_dist %>% 
+  summarize(
+    ci_lower = quantile(r.squared, 0.025), 
+    ci_upper = quantile(r.squared, 0.975)) %>% 
+  knitr::kable(digits = 3)
+```
+
+
 
